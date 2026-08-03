@@ -1,0 +1,37 @@
+[
+  {
+    "id": "1",
+    "prompt": "Explain how the water cycle works.",
+    "response": "The water cycle describes evaporation, condensation, and precipitation."
+  },
+  {
+    "id": "2",
+    "prompt": "Define machine learning.",
+    "response": "Machine learning is a method for systems to learn from data."
+  },
+  {
+    "id": "3",
+    "prompt": "Compare apples and oranges.",
+    "response": "Apples are typically crunchier, while oranges are usually juicier."
+  },
+  {
+    "id": "4",
+    "prompt": "Solve this equation: 2x + 4 = 10.",
+    "response": "Subtract 4 from both sides, then divide by 2 to get x = 3."
+  },
+  {
+    "id": "5",
+    "prompt": "Summarize the article in one paragraph.",
+    "response": "The article explains the main ideas in a brief and clear way."
+  },
+  {
+    "id": "6",
+    "prompt": "Translate hello into Spanish.",
+    "response": "Hello in Spanish is hola."
+  },
+  {
+    "id": "7",
+    "prompt": "Write a friendly email reminder.",
+    "response": "Hi there, I wanted to gently remind you about the upcoming deadline."
+  }
+]

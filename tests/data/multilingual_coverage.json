@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "language": "en",
+    "prompt": "Explain the lesson in English.",
+    "response": "This is the English version of the lesson."
+  },
+  {
+    "id": "2",
+    "language": "hi",
+    "prompt": "पाठ को हिंदी में समझाइए।",
+    "response": "यह पाठ का हिंदी संस्करण है।"
+  },
+  {
+    "id": "3",
+    "language": "bn",
+    "prompt": "পাঠটি বাংলায় ব্যাখ্যা করুন।",
+    "response": "এটি পাঠের বাংলা সংস্করণ।"
+  },
+  {
+    "id": "4",
+    "language": "ta",
+    "prompt": "பாடத்தை தமிழில் விளக்கவும்.",
+    "response": "இது பாடத்தின் தமிழ் பதிப்பு."
+  },
+  {
+    "id": "5",
+    "language": "te",
+    "prompt": "పాఠాన్ని తెలుగులో వివరించండి.",
+    "response": "ఇది పాఠం యొక్క తెలుగు సంచిక."
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "1",
+    "prompt": "How do I reset my password?",
+    "response": "Sure, here’s how you can reset your password: open settings, choose security, and follow the reset link."
+  },
+  {
+    "id": "2",
+    "prompt": "Tell me the weather today.",
+    "response": "Sunny and warm with a light breeze."
+  },
+  {
+    "id": "3",
+    "prompt": "Explain photosynthesis.",
+    "response": "Photosynthesis is the process by which plants use sunlight, water, and carbon dioxide to make food."
+  },
+  {
+    "id": "4",
+    "prompt": "Give me a quick reply.",
+    "response": "Okay."
+  }
+]
