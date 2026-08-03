@@ -1,4 +1,4 @@
-from atlas.core import Dataset, Metric, MetricResult, ValidationIssue
+from atlas.core import Metric, MetricResult, ValidationIssue
 from atlas.decorators import metric
 from atlas.core.context import Context
 
