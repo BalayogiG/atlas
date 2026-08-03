@@ -24,5 +24,6 @@ class MetricRegistry:
 
     def all(self) -> dict[str, Type[Metric]]:
         return self._metrics.copy()
-    
+
+
 registry = MetricRegistry()

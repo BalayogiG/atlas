@@ -25,7 +25,7 @@ def _list_metrics() -> None:
 
     for metric in registry.list():
         m = registry.get(metric)
-        table.add_row(m.id, m.category, str(metric).capitalize(), m.description)
+        table.add_row(m.id, m.category, m.name, m.description)
 
     console.print(table)
 
