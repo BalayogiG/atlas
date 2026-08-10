@@ -18,7 +18,7 @@ class Toxicity(Metric):
     Measures how much toxicity chatbot responses contain.
     """
 
-    id = "LQ001"
+    id = "C001"
     name = "Toxicity"
     description = "Measures how much toxicity chatbot responses contains."
     category = "Common"
