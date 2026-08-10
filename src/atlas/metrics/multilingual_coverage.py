@@ -11,8 +11,8 @@ class MultilingualCoverage(Metric):
     Measures how much of the dataset is available in the target languages.
     """
 
-    id = "MC001"
-    name = "Multilingual Coverage"
+    id = "LQ003"
+    name = "Multilingual_Coverage"
     description = "Measures how much of the dataset is available in the target languages."
     category = "Language Quality"
 

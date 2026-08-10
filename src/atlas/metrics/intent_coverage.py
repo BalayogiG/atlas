@@ -23,8 +23,8 @@ class IntentCoverage(Metric):
     Measures how broadly common user intents are represented in the dataset.
     """
 
-    id = "IC001"
-    name = "Intent Coverage"
+    id = "LQ002"
+    name = "Intent_Coverage"
     description = "Measures how broadly common user intents are represented in the dataset."
     category = "Language Quality"
 

@@ -18,7 +18,7 @@ class ConversationalLanguageQuality(Metric):
     """
 
     id = "LQ001"
-    name = "Conversational Language Quality"
+    name = "Conversational_Language_Quality"
     description = "Measures how naturally and readably chatbot responses are written."
     category = "Language Quality"
 
