@@ -11,12 +11,13 @@ Each metric takes a `pandas.DataFrame` and returns a `MetricResult` — a
 pip install -e .
 ```
 
-ATLAS reads CSV, Excel, JSON, and Parquet files out of the box. The optional
-local-model reasoning feature (see [Reasoning](#reasoning) below) requires an
-extra:
+ATLAS reads CSV, Excel, JSON, and Parquet files out of the box. Two features
+ship as optional extras so their (heavier) dependencies aren't forced on
+everyone:
 
 ```bash
-pip install -e ".[reasoning]"
+pip install -e ".[reasoning]"   # local-model reasoning, see Reasoning below
+pip install -e ".[toxicity]"    # DQ003 Toxicity — pulls in detoxify (PyTorch), sarvamai, requests
 ```
 
 ## Quickstart
@@ -61,6 +62,7 @@ path, and an `output=` / `output_format=` pair (`"json"`, `"markdown"`, or
 | --- | --- | --- |
 | `DQ001` | Completeness | [docs/metrics/completeness.md](docs/metrics/completeness.md) |
 | `DQ002` | Data Quality & Noise | [docs/metrics/data-quality-noise.md](docs/metrics/data-quality-noise.md) |
+| `DQ003` | Toxicity | [docs/metrics/toxicity.md](docs/metrics/toxicity.md) |
 
 See [docs/metrics/README.md](docs/metrics/README.md) for the full metric
 index, and each metric's own doc for its scoring formula, configuration
@@ -78,9 +80,9 @@ atlas version
 ```
 
 Run `atlas --help` or `atlas <command> --help` for full option details. Note
-that metric-specific options such as `required_fields`, `schema`, and
-`consistency_rules` are only available through the Python API, not as CLI
-flags.
+that metric-specific options such as `required_fields`, `schema`,
+`consistency_rules`, and `text_field`/`sarvam_api_key` are only available
+through the Python API, not as CLI flags.
 
 ## Reasoning
 
