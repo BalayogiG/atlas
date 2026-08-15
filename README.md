@@ -1,183 +1,109 @@
 # ATLAS
 
-**Automated Toolkit for Language Data Assessment and Scoring.**
-
-ATLAS evaluates datasets of language-model inputs and outputs. It currently
-includes a completeness metric that checks required fields are present and
-non-empty, along with command-line and Python APIs for loading data and
-rendering evaluation reports.
-
-## Requirements
-
-- Python 3.10 or later
+ATLAS evaluates tabular dataset quality through a small, extensible metric API.
+Each metric takes a `pandas.DataFrame` and returns a `MetricResult` — a
+`0.0`–`1.0` score, structured `details`, and human-readable `reasons` and
+`recommendations`.
 
 ## Installation
 
-Install ATLAS from a checkout:
+```bash
+pip install -e .
+```
+
+ATLAS reads CSV, Excel, JSON, and Parquet files out of the box. The optional
+local-model reasoning feature (see [Reasoning](#reasoning) below) requires an
+extra:
 
 ```bash
-python -m pip install -e .
+pip install -e ".[reasoning]"
 ```
 
-For development tools:
-
-```bash
-python -m pip install -e '.[dev]'
-```
-
-To read Excel or Parquet datasets, install the optional format dependencies:
-
-```bash
-python -m pip install -e '.[formats]'
-```
-
-## Quick start
-
-Create a JSON dataset such as `dataset.json`:
-
-```json
-[
-  {
-    "id": "1",
-    "prompt": "Summarize the document.",
-    "response": "A short summary."
-  },
-  {
-    "id": "2",
-    "prompt": "Translate this sentence.",
-    "response": ""
-  }
-]
-```
-
-Evaluate it from the command line:
-
-```bash
-atlas evaluate dataset.json
-```
-
-The default evaluation runs the **Completeness** metric with `id`, `prompt`,
-and `response` as required fields. A score of `1.00` means every required field
-in every record is present and non-empty.
-
-## Command-line usage
-
-```text
-atlas evaluate DATASET [--format FORMAT]... [--output PATH]
-atlas metrics [list]
-atlas version
-```
-
-List the metrics available in the installed version:
-
-```bash
-atlas metrics list
-```
-
-### Reports
-
-The `evaluate` command prints a terminal report by default. Use `--format` (or
-`-f`) to choose a report format:
-
-```bash
-# Write a Markdown report
-atlas evaluate dataset.json --format markdown --output reports/evaluation.md
-
-# Write JSON, CSV, or HTML reports
-atlas evaluate dataset.json --format json --output reports/evaluation.json
-atlas evaluate dataset.json --format csv --output reports/evaluation.csv
-atlas evaluate dataset.json --format html --output reports/evaluation.html
-```
-
-Supported formats are `console`, `json`, `csv`, `markdown`, and `html`. Repeat
-`--format` to render more than one report; when doing so, omit `--output` and
-ATLAS writes file reports as `report.json`, `report.csv`, `report.md`, or
-`report.html` in the current directory.
-
-JSON reports preserve the full evaluation result, including validation issues
-and metric metadata. CSV, Markdown, and HTML reports summarize the metric,
-score, and pass/fail status.
-
-## Supported datasets
-
-Each dataset must represent records as dictionaries/objects. ATLAS selects a
-loader from the file extension:
-
-| Format | Extensions | Notes |
-| --- | --- | --- |
-| JSON | `.json` | A JSON array of record objects |
-| JSON Lines | `.jsonl`, `.ndjson` | One JSON object per non-empty line |
-| CSV | `.csv` | Header row becomes field names |
-| Excel | `.xlsx`, `.xls` | Requires `atlas[formats]` |
-| Parquet | `.parquet` | Requires `atlas[formats]` |
-
-For the built-in completeness check, a field is considered invalid when it is
-missing, `null`, or an empty/whitespace-only string. Record positions in report
-issues are zero-based.
-
-## Python API
-
-Use `Atlas` to load, evaluate, and render a report in one call:
+## Quickstart
 
 ```python
 from atlas import Atlas
-from atlas.core.config import MetricConfig
 
-report = Atlas().evaluate(
-    dataset_path="dataset.json",
-    metrics=["completeness"],
-    configs={
-        "completeness": MetricConfig(
-            options={"required_fields": ["id", "prompt", "response"]}
-        )
-    },
-    formats=["json"],
-    output="reports/evaluation.json",
-)
-
+report = Atlas().evaluate("employees.csv")
 print(report.overall_score)
-print(report.passed)
+
+for metric_id, result in report.metrics.items():
+    print(metric_id, result.metric, result.score, result.reasons)
 ```
 
-To render an existing report without evaluating again, call `Atlas().render()`.
-`EvaluationReport.to_dict()` returns a serializable representation containing
-the dataset name, metric results, issues, metadata, overall score, and pass
-status.
-
-## Adding a metric
-
-Metrics subclass `atlas.core.Metric` and are registered with the `@metric`
-decorator. Implement `evaluate()` to return a `MetricResult`; optional
-`setup()` and `teardown()` hooks receive the dataset and configuration through
-the evaluation context. Ensure the module defining a metric is imported before
-the metric is requested.
+Omitting `metrics` runs every registered metric. To run a subset, pass their
+metric IDs:
 
 ```python
-from atlas.core import Metric, MetricResult
-from atlas.decorators import metric
-
-
-@metric
-class RecordCount(Metric):
-    id = "DQ002"
-    name = "Record Count"
-    description = "Counts dataset records."
-    category = "Data Quality"
-
-    def evaluate(self, context):
-        count = len(context.dataset.records)
-        return MetricResult(
-            metric=self.name,
-            score=1.0,
-            passed=True,
-            metadata={"record_count": count},
-        )
+report = Atlas().evaluate("employees.csv", metrics=["DQ001"])
+result = report.metrics["DQ001"]
+print(result.score, result.details["missing_rate_by_column"])
 ```
 
-## Development
+ATLAS infers a schema automatically for the Data Quality & Noise metric
+(`DQ002`). For deterministic production validation, provide an explicit
+schema instead:
 
-Run the test suite with:
+```python
+from atlas import Atlas, AtlasSchema
+
+schema = AtlasSchema.from_dict({"id": "int", "age": "int", "email": "email"})
+report = Atlas().evaluate("employees.csv", metrics=["DQ002"], schema=schema)
+```
+
+`evaluate()` also accepts a `pandas.DataFrame` directly in place of a file
+path, and an `output=` / `output_format=` pair (`"json"`, `"markdown"`, or
+`"html"`) to save a rendered report alongside the returned `EvaluationReport`.
+
+## Available metrics
+
+| Metric ID | Metric | Documentation |
+| --- | --- | --- |
+| `DQ001` | Completeness | [docs/metrics/completeness.md](docs/metrics/completeness.md) |
+| `DQ002` | Data Quality & Noise | [docs/metrics/data-quality-noise.md](docs/metrics/data-quality-noise.md) |
+
+See [docs/metrics/README.md](docs/metrics/README.md) for the full metric
+index, and each metric's own doc for its scoring formula, configuration
+options, and `details` schema.
+
+## Command-line interface
 
 ```bash
-python -m pytest
+atlas evaluate --dataset employees.csv                       # run every registered metric
+atlas evaluate --dataset employees.csv --metric DQ001         # run one metric (repeatable)
+atlas evaluate --dataset employees.csv --output report.json --format json
+atlas list-metrics                                            # table of registered metrics
+atlas get-metric --name DQ001                                 # metadata for one metric
+atlas version
 ```
+
+Run `atlas --help` or `atlas <command> --help` for full option details. Note
+that metric-specific options such as `required_fields`, `schema`, and
+`consistency_rules` are only available through the Python API, not as CLI
+flags.
+
+## Reasoning
+
+Passing `reasoning=True` to `Atlas().evaluate()` (or `--reasoning` on the
+CLI) sends each metric's score and details to a local [Ollama](https://ollama.com)
+model to append a generated explanation and recommendations on top of the
+built-in ones. It requires the `reasoning` extra and a running Ollama
+instance; if the model call fails, ATLAS falls back to the built-in
+`reasons`/`recommendations` and raises a `RuntimeWarning`.
+
+## Extending ATLAS
+
+New metrics implement the `Metric` abstract base class and register
+themselves with the `@metric` decorator:
+
+```python
+from atlas import Metric, MetricResult, metric
+
+@metric(name="My Metric", category="Custom", metric_id="CUSTOM001")
+class MyMetric(Metric):
+    def compute(self, df, **kwargs) -> MetricResult:
+        ...
+```
+
+Once imported, the metric is available by its `metric_id` to
+`Atlas().evaluate()` and the CLI.

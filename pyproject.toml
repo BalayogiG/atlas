@@ -1,46 +1,29 @@
 [build-system]
-requires = ["setuptools>=75.0"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
-
 
 [project]
 name = "atlas"
-version = "0.0.1"
-description = "Automated Toolkit for Language Data Assessment and Scoring."
+version = "0.1.0"
+description = "Minimal, extensible tabular data-quality evaluation."
 readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
-
-authors = [
-    { name = "Dr. Balayogi" }
-]
-
+requires-python = ">=3.11"
 dependencies = [
-    "typer",
-    "rich",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "scipy>=1.10",
+  "scikit-learn>=1.3",
+  "typer>=0.9",
+  "openpyxl>=3.1",
+  "pyarrow>=12",
+  "rich>=13",
 ]
-
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "black",
-    "ruff",
-]
-formats = [
-    "pandas",
-    "openpyxl",
-    "pyarrow",
-]
-
+reasoning = ["ollama>=0.3"]
 
 [project.scripts]
-atlas = "atlas.cli.main:main"
-
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
+atlas = "atlas.cli:app"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+include = ["atlas*"]
