@@ -32,8 +32,8 @@ Dataset, restricted to a single free-text column. The metric reads every value i
 | `text_field` (kwarg) | `str` | No | Column holding the free text to score. Defaults to `"response"`. If the column doesn't exist, `compute()` raises `KeyError` immediately rather than returning a misleadingly perfect score. |
 | `source_lang` (kwarg) | `str` | No | Source language code passed to the translator. Defaults to `"auto"` (let Sarvam detect it). |
 | `sarvam_mode` (kwarg) | `str` | No | `"api"` (default) uses the `sarvamai` SDK client; any other value uses a raw HTTP POST to `sarvam_url`. |
-| `sarvam_api_key` (kwarg) | `str \| None` | No | Sarvam subscription key, passed as `api_subscription_key` (SDK mode) or the `api-subscription-key` header (URL mode). Required by Sarvam itself for both modes; `compute()` does not validate its presence up front — an invalid/missing key surfaces as a per-row translation failure instead. |
-| `sarvam_url` (kwarg) | `str` | No | Endpoint used only when `sarvam_mode != "api"`. Defaults to `DEFAULT_SARVAM_URL = "https://api.sarvam.ai/translate"`. |
+| `sarvam_api_key` (kwarg) | `str \| None` | Conditional | Sarvam subscription key, passed as `api_subscription_key` (SDK mode) or the `api-subscription-key` header (URL mode). Defaults to the `SARVAM_API_KEY` environment variable (loaded from a `.env` file if present, via `python-dotenv`) when the kwarg isn't passed. When `sarvam_mode == "api"` (the default) and no key is available from either source, `compute()` raises `ValueError` **up front**, before any row is processed. In non-`"api"` mode an empty key is *not* validated up front — the HTTP call itself will fail per-row instead. An invalid (but non-empty) key in either mode still only surfaces as a per-row translation failure, not an upfront error. |
+| `sarvam_url` (kwarg) | `str` | No | Endpoint used only when `sarvam_mode != "api"`. Defaults to the `SARVAM_URL` environment variable, falling back to `DEFAULT_SARVAM_URL = "https://api.sarvam.ai/translate"` if that's also unset. |
 
 ---
 
@@ -46,6 +46,14 @@ For every non-missing, non-blank value in `df[text_field]`, the metric coerces i
 ### Evaluation Method
 
 ```
+load_dotenv()                                   # pulls SARVAM_API_KEY / SARVAM_URL from a .env file, if present
+
+sarvam_api_key = kwargs.get("sarvam_api_key", os.getenv("SARVAM_API_KEY"))
+sarvam_url = kwargs.get("sarvam_url", os.getenv("SARVAM_URL", DEFAULT_SARVAM_URL))
+
+if sarvam_mode == "api" and not sarvam_api_key:
+    raise ValueError(...)                       # fail fast: no key, no point starting
+
 if text_field not in df.columns:
     raise KeyError(...)                       # fail fast on a config mistake, don't score
 
@@ -75,6 +83,7 @@ Notes on the pseudocode above (all taken directly from [`atlas/metrics/toxicity.
 * **Lazy, one-time setup.** The translator and the `Detoxify` model are only constructed the first time a row actually needs them — a dataset with an entirely empty/missing text column never imports `detoxify`, `sarvamai`, or `requests`, never makes a network call, and never loads the model. Once built, both are reused for every remaining row in the same `compute()` call (they are not rebuilt per row).
 * **Per-row failures are isolated, not fatal.** If translation or scoring raises for one row (network timeout, bad API key, malformed response, etc.), that row is counted in `failed` and excluded from `toxicity_rate` — it does not abort evaluation of the rest of the dataset. Construction failures (e.g. `detoxify`/`sarvamai` not installed) are **not** caught this way — they happen outside the per-row `try`/`except`, on first use, and propagate immediately.
 * **A missing `text_field` is a hard error, not a trivial pass.** Unlike Completeness's `required_field_coverage` (which degrades to `0.0` but still returns a result), an absent text column raises `KeyError` — because silently scoring a safety metric `1.0` when it never actually ran would be actively misleading.
+* **A missing `sarvam_api_key` in `"api"` mode is *also* a hard error, checked before the `text_field` check** — `compute()` raises `ValueError("SARVAM_API_KEY is not configured.")` immediately if `sarvam_mode == "api"` (the default) and no key was resolved from either the `sarvam_api_key` kwarg or the `SARVAM_API_KEY` environment variable. This runs before any translation/model construction, so a misconfigured key never burns time downloading `detoxify` or making a doomed API call. Non-`"api"` mode (raw HTTP) has no equivalent upfront check — an empty/invalid key there only surfaces once the first HTTP call is attempted, landing in `records_failed` per row like any other translation failure.
 * **`_to_text` list/dict coercion is checked before the null check**, so a list or dict value is never mistaken for missing — only `None` and float `NaN` are treated as missing values; a list, dict, or scalar of any other type is stringified.
 * Translation is applied unconditionally to every non-empty value, even when `source_lang="auto"` and the text may already be English — there's no short-circuit for already-English text.
 
@@ -119,8 +128,8 @@ Configuration is passed as keyword arguments to `compute()` (or forwarded throug
 | `text_field` | `str` | `"response"` | Column to score. Raises `KeyError` if absent from `df.columns`. |
 | `source_lang` | `str` | `"auto"` | Source language code for translation. |
 | `sarvam_mode` | `str` | `"api"` | `"api"` for the `sarvamai` SDK, anything else for the raw HTTP endpoint. |
-| `sarvam_api_key` | `str \| None` | `None` | Sarvam subscription key. |
-| `sarvam_url` | `str` | `"https://api.sarvam.ai/translate"` | HTTP endpoint, used only in non-`"api"` mode. |
+| `sarvam_api_key` | `str \| None` | `os.getenv("SARVAM_API_KEY")` | Sarvam subscription key. Raises `ValueError` if still falsy and `sarvam_mode == "api"`. |
+| `sarvam_url` | `str` | `os.getenv("SARVAM_URL", "https://api.sarvam.ai/translate")` | HTTP endpoint, used only in non-`"api"` mode. |
 
 Example:
 
@@ -208,7 +217,7 @@ Serialized example (via `Atlas().evaluate(..., output="report.json")`):
 atlas evaluate --dataset conversations.csv --metric DQ003
 ```
 
-As with the other metrics, the CLI does not expose `text_field`, `sarvam_api_key`, `source_lang`, `sarvam_mode`, or `sarvam_url` as flags — those are Python-API-only. Without a valid `sarvam_api_key`, every row with real text will fail translation and land in `records_failed`, so running this metric meaningfully from the CLI alone isn't currently possible; use the Python API instead.
+As with the other metrics, the CLI does not expose `text_field`, `sarvam_api_key`, `source_lang`, `sarvam_mode`, or `sarvam_url` as flags — those are Python-API-only kwargs. If `SARVAM_API_KEY` is set in the environment (or a `.env` file next to where you run `atlas`), the CLI will pick it up automatically via `sarvam_api_key`'s environment-variable fallback; otherwise `compute()` raises `ValueError` immediately (in `"api"` mode, the default) rather than attempting any row. Use the Python API if you need to pass `text_field` or other kwargs explicitly.
 
 ### Python API
 
@@ -254,6 +263,8 @@ result = ToxicityMetric().compute(
 ```python
 """Toxicity content-safety metric."""
 
+import logging
+import os
 from typing import Any, Callable
 
 import pandas as pd
@@ -263,27 +274,38 @@ from ..decorators import metric
 
 DEFAULT_SARVAM_URL = "https://api.sarvam.ai/translate"
 
+logger = logging.getLogger(__name__)
+
 
 @metric(
     name="Toxicity",
     category="Common",
     metric_id="DQ003",
     category_id="CAT001",
-    description="Measures how much toxicity chatbot responses contain.",
+    description="Measures how much toxicity training data contain.",
 )
 class ToxicityMetric(Metric):
-    """Translate free-text responses to English, then score them for toxic content."""
+    """Translate free-text column to English, then score them for toxic content."""
 
     def compute(self, df: pd.DataFrame, **kwargs: Any) -> MetricResult:
         """Average per-response toxicity into an aggregate 0.0--1.0 quality score (1.0 = no toxicity)."""
+        from dotenv import load_dotenv
+        load_dotenv()
+
         text_field = kwargs.get("text_field", "response")
         source_lang = kwargs.get("source_lang", "auto")
         sarvam_mode = kwargs.get("sarvam_mode", "api")
-        sarvam_api_key = kwargs.get("sarvam_api_key")
-        sarvam_url = kwargs.get("sarvam_url", DEFAULT_SARVAM_URL)
+        sarvam_api_key = kwargs.get("sarvam_api_key", os.getenv("SARVAM_API_KEY"))
+        sarvam_url = kwargs.get("sarvam_url", os.getenv("SARVAM_URL", DEFAULT_SARVAM_URL))
+
+        if sarvam_mode == "api" and not sarvam_api_key:
+            raise ValueError("SARVAM_API_KEY is not configured.")
 
         if text_field not in df.columns:
             raise KeyError(f"Column '{text_field}' not found in dataset columns: {list(df.columns)}")
+
+        logger.debug("Computing toxicity for %d rows on column %r (sarvam_mode=%r, source_lang=%r)",
+                     len(df), text_field, sarvam_mode, source_lang)
 
         translate: Callable[[str], str] | None = None
         model = None
@@ -291,17 +313,19 @@ class ToxicityMetric(Metric):
         missing_or_empty = 0
         failed = 0
 
-        for value in df[text_field]:
+        for index, value in df[text_field].items():
             text = self._to_text(value)
             if not text or not text.strip():
                 missing_or_empty += 1
                 continue
             if translate is None:
+                logger.debug("Building translator and loading Detoxify model on first scorable row.")
                 translate = self._build_translator(sarvam_mode, sarvam_api_key, source_lang, sarvam_url)
                 model = self._load_model()
             try:
                 scores.append(float(model.predict(translate(text))["toxicity"]))
             except Exception:
+                logger.warning("Row %r could not be translated or scored and was excluded.", index, exc_info=True)
                 failed += 1
 
         toxicity_rate = float(sum(scores) / len(scores)) if scores else 0.0
@@ -310,14 +334,17 @@ class ToxicityMetric(Metric):
                    "records_missing_or_empty": missing_or_empty, "records_failed": failed}
         reasons = []
         if len(df) and not scores:
+            logger.warning("No rows in column %r had scorable text; toxicity could not be evaluated.", text_field)
             reasons.append("No responses had scorable text; toxicity could not be evaluated.")
         if toxicity_rate:
             reasons.append(f"{toxicity_rate:.1%} average toxicity detected across scored responses.")
         if failed:
             reasons.append(f"{failed} response(s) could not be translated or scored and were excluded.")
         recommendations = ["Review and moderate responses flagged as toxic."] if toxicity_rate else []
-        return MetricResult(self.name, self.category, round(1 - toxicity_rate, 4), details,
-                            reasons, recommendations)
+        score = round(1 - toxicity_rate, 4)
+        logger.debug("Toxicity score: %s (%d scored, %d missing/empty, %d failed)",
+                     score, len(scores), missing_or_empty, failed)
+        return MetricResult(self.name, self.category, score, details, reasons, recommendations)
 
     @staticmethod
     def _to_text(value: Any) -> str | None:
@@ -367,13 +394,18 @@ Source: [atlas/metrics/toxicity.py](../../atlas/metrics/toxicity.py)
 
 ### Logging
 
-None. `ToxicityMetric.compute()` does not use the `logging` module. Per-row translation/scoring failures are silently counted into `details["records_failed"]` rather than logged — if you need to know *why* specific rows failed, you'll need to instrument `_build_translator`'s callables yourself (e.g. wrap them to log exceptions before they're swallowed).
+`ToxicityMetric.compute()` logs via `logging.getLogger("atlas.metrics.toxicity")`. Silent by default (see `CompletenessMetric`'s logging note for the `NullHandler` pattern); configure `logging.basicConfig(level=...)` in your application to see it.
+
+* `DEBUG` — entry (row count, `text_field`, `sarvam_mode`, `source_lang`), a note when the translator/`Detoxify` model are constructed on the first scorable row, and the final score with scored/missing/failed counts.
+* `WARNING` — emitted once per row that raises during translation or scoring, including the row's index and a full traceback (`exc_info=True`) — this is the fix for the previous blind spot where such rows were only visible as an aggregate `records_failed` count with no way to see *why* a specific row failed. Also emitted once if the dataset is non-empty but zero rows end up scorable (every row missing/blank or every attempt failed).
+
+Per-row failures are still counted into `details["records_failed"]` as before — logging is additive, not a replacement for that field.
 
 ### Dependencies
 
 **Core:** `pandas` plus the ATLAS base (`atlas.base`, `atlas.decorators`) — same as every other metric.
 
-**Optional, lazily imported** (only loaded the first time a row needs them, not at module import time): `detoxify` (which pulls in PyTorch — a large install) for toxicity scoring, `sarvamai` for the SDK translation path, and `requests` for the raw-HTTP translation path. Install them with:
+**Optional, lazily imported** (only loaded the first time a row needs them, not at module import time): `detoxify` (which pulls in PyTorch — a large install) for toxicity scoring, `sarvamai` for the SDK translation path, and `requests` for the raw-HTTP translation path. `python-dotenv` is imported lazily at the top of `compute()` itself (every call, not just the first) to load a `.env` file before reading `SARVAM_API_KEY`/`SARVAM_URL`. Install them with:
 
 ```bash
 pip install -e ".[toxicity]"
@@ -418,6 +450,7 @@ Assert score, details, reasons, and recommendations match
 | Test Case | Description | Expected Result |
 | :---- | :---- | :---- |
 | Missing `text_field` column | `text_field` (or the default `"response"`) not in `df.columns` | Raises `KeyError` before any scoring happens |
+| Missing `sarvam_api_key` in `"api"` mode | No `sarvam_api_key` kwarg and `SARVAM_API_KEY` unset (mock `os.getenv`/clear the env var in the test) | Raises `ValueError` before the `text_field` check, before any scoring |
 | Clean responses | All mocked scores near `0.0` | `toxicity_rate` near `0.0`, `score` near `1.0`, no toxicity reason |
 | Some toxic responses | Mock returns a high score for one row | `toxicity_rate > 0`; reason string with the percentage; `recommendations` non-empty |
 | All rows missing/blank | Every value is `None`/`""`/whitespace | `records_scored = 0`; `score = 1.0`; caveat reason present; `_load_model`/`_build_translator` never called |
@@ -448,7 +481,8 @@ The deterministic parts of this metric (row coercion via `_to_text`, aggregation
 * Missing `text_field` — raises `KeyError` immediately; does not return a `MetricResult` at all.
 * `score = 1.0` from zero scored rows — indistinguishable from a genuinely clean dataset by the score alone; always cross-check `records_scored` and `reasons` (see [Score Interpretation](#score-interpretation)).
 * A row whose text is real but every attempt to translate/score it fails — excluded from `toxicity_rate` entirely (not treated as `0.0` toxicity, and not treated as missing); only visible via `records_failed`.
-* `sarvam_api_key=None` (or an invalid key) — the SDK/HTTP call itself fails, so this surfaces as `records_failed` growing on every row with real text, not as an upfront validation error.
+* `sarvam_api_key=None` with `sarvam_mode="api"` and no `SARVAM_API_KEY` env var set — raises `ValueError` upfront, before any row is processed (no `MetricResult` at all).
+* `sarvam_api_key` set but **invalid**, or `sarvam_api_key=None` with `sarvam_mode` set to anything other than `"api"` — no upfront check in either case; the SDK/HTTP call itself fails per row, so this surfaces as `records_failed` growing on every row with real text.
 * A dataset entirely of non-toxic-language rows but in a non-English source language and `source_lang="auto"` — translation still runs on every non-empty value; if Sarvam mis-detects the language, that shows up as a translation-quality issue rather than a metric bug.
 * Very large datasets — this metric makes one network call and one model inference **per row**, so its cost is `O(rows)` in both latency and (depending on the Sarvam plan) API cost, unlike the fully vectorized, local `DQ001`/`DQ002`. There is no batching in the current implementation.
 * List/dict values in the text column — joined into a single string with spaces (`" ".join(...)`) before translation; this can produce ungrammatical text that still translates and scores "reasonably," but isn't the same as a natural sentence.

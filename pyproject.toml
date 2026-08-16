@@ -21,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 reasoning = ["ollama>=0.3"]
-toxicity = ["detoxify>=0.5", "sarvamai>=0.1", "requests>=2.31"]
+toxicity = ["detoxify>=0.5", "sarvamai>=0.1", "requests>=2.31", "python-dotenv>=1.0"]
 
 [project.scripts]
 atlas = "atlas.cli:app"

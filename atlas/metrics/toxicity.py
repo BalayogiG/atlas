@@ -1,5 +1,7 @@
 """Toxicity content-safety metric."""
 
+import logging
+import os
 from typing import Any, Callable
 
 import pandas as pd
@@ -9,27 +11,48 @@ from ..decorators import metric
 
 DEFAULT_SARVAM_URL = "https://api.sarvam.ai/translate"
 
+logger = logging.getLogger(__name__)
+
 
 @metric(
     name="Toxicity",
     category="Common",
     metric_id="DQ003",
     category_id="CAT001",
-    description="Measures how much toxicity chatbot responses contain.",
+    description="Measures how much toxicity training data contain.",
 )
 class ToxicityMetric(Metric):
-    """Translate free-text responses to English, then score them for toxic content."""
+    """Translate free-text column to English, then score them for toxic content."""
 
     def compute(self, df: pd.DataFrame, **kwargs: Any) -> MetricResult:
         """Average per-response toxicity into an aggregate 0.0--1.0 quality score (1.0 = no toxicity)."""
+        from dotenv import load_dotenv
+        load_dotenv()
+
         text_field = kwargs.get("text_field", "response")
         source_lang = kwargs.get("source_lang", "auto")
         sarvam_mode = kwargs.get("sarvam_mode", "api")
-        sarvam_api_key = kwargs.get("sarvam_api_key")
-        sarvam_url = kwargs.get("sarvam_url", DEFAULT_SARVAM_URL)
+
+        sarvam_api_key = kwargs.get(
+            "sarvam_api_key",
+            os.getenv("SARVAM_API_KEY"),
+        )
+
+        sarvam_url = kwargs.get(
+            "sarvam_url",
+            os.getenv("SARVAM_URL", DEFAULT_SARVAM_URL),
+        )
+
+        if sarvam_mode == "api" and not sarvam_api_key:
+            raise ValueError(
+                "SARVAM_API_KEY is not configured."
+            )
 
         if text_field not in df.columns:
             raise KeyError(f"Column '{text_field}' not found in dataset columns: {list(df.columns)}")
+
+        logger.debug("Computing toxicity for %d rows on column %r (sarvam_mode=%r, source_lang=%r)",
+                     len(df), text_field, sarvam_mode, source_lang)
 
         translate: Callable[[str], str] | None = None
         model = None
@@ -37,17 +60,19 @@ class ToxicityMetric(Metric):
         missing_or_empty = 0
         failed = 0
 
-        for value in df[text_field]:
+        for index, value in df[text_field].items():
             text = self._to_text(value)
             if not text or not text.strip():
                 missing_or_empty += 1
                 continue
             if translate is None:
+                logger.debug("Building translator and loading Detoxify model on first scorable row.")
                 translate = self._build_translator(sarvam_mode, sarvam_api_key, source_lang, sarvam_url)
                 model = self._load_model()
             try:
                 scores.append(float(model.predict(translate(text))["toxicity"]))
             except Exception:
+                logger.warning("Row %r could not be translated or scored and was excluded.", index, exc_info=True)
                 failed += 1
 
         toxicity_rate = float(sum(scores) / len(scores)) if scores else 0.0
@@ -56,14 +81,17 @@ class ToxicityMetric(Metric):
                    "records_missing_or_empty": missing_or_empty, "records_failed": failed}
         reasons = []
         if len(df) and not scores:
+            logger.warning("No rows in column %r had scorable text; toxicity could not be evaluated.", text_field)
             reasons.append("No responses had scorable text; toxicity could not be evaluated.")
         if toxicity_rate:
             reasons.append(f"{toxicity_rate:.1%} average toxicity detected across scored responses.")
         if failed:
             reasons.append(f"{failed} response(s) could not be translated or scored and were excluded.")
         recommendations = ["Review and moderate responses flagged as toxic."] if toxicity_rate else []
-        return MetricResult(self.name, self.category, round(1 - toxicity_rate, 4), details,
-                            reasons, recommendations)
+        score = round(1 - toxicity_rate, 4)
+        logger.debug("Toxicity score: %s (%d scored, %d missing/empty, %d failed)",
+                     score, len(scores), missing_or_empty, failed)
+        return MetricResult(self.name, self.category, score, details, reasons, recommendations)
 
     @staticmethod
     def _to_text(value: Any) -> str | None:

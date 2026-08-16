@@ -303,7 +303,17 @@ Source: [atlas/metrics/completeness.py](../../atlas/metrics/completeness.py)
 
 ### Logging
 
-None. `CompletenessMetric.compute()` does not use the `logging` module or emit any log output — it is a pure function of `df` and `kwargs`. If you need visibility into a run, inspect the returned `MetricResult.details` directly, or wrap the call yourself.
+`CompletenessMetric.compute()` logs via `logging.getLogger("atlas.metrics.completeness")`. It is silent by default (ATLAS attaches a `NullHandler` to the `"atlas"` logger, per standard library-logging practice) — configure logging in your application to see it:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+* `DEBUG` — one line on entry (`"Computing completeness for %d rows, %d columns (required_fields=%s)"`) and one on exit with the final score.
+* `WARNING` — emitted when `required_fields` includes a column not present in `df.columns` (the same condition that forces `required_field_coverage` to `0.0`).
+
+For structured, machine-readable visibility into a run, `MetricResult.details` remains the primary interface — logging is a debugging aid, not a substitute.
 
 ### Dependencies
 

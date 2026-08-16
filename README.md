@@ -63,6 +63,7 @@ path, and an `output=` / `output_format=` pair (`"json"`, `"markdown"`, or
 | `DQ001` | Completeness | [docs/metrics/completeness.md](docs/metrics/completeness.md) |
 | `DQ002` | Data Quality & Noise | [docs/metrics/data-quality-noise.md](docs/metrics/data-quality-noise.md) |
 | `DQ003` | Toxicity | [docs/metrics/toxicity.md](docs/metrics/toxicity.md) |
+| `DQ004` | Documentation & Transparency | [docs/metrics/documentation-transparency.md](docs/metrics/documentation-transparency.md) |
 
 See [docs/metrics/README.md](docs/metrics/README.md) for the full metric
 index, and each metric's own doc for its scoring formula, configuration
@@ -81,8 +82,8 @@ atlas version
 
 Run `atlas --help` or `atlas <command> --help` for full option details. Note
 that metric-specific options such as `required_fields`, `schema`,
-`consistency_rules`, and `text_field`/`sarvam_api_key` are only available
-through the Python API, not as CLI flags.
+`consistency_rules`, `text_field`/`sarvam_api_key`, and `dataset_path` are
+only available through the Python API, not as CLI flags.
 
 ## Reasoning
 

@@ -1,5 +1,6 @@
 """Noise and validity quality metric."""
 
+import logging
 import re
 from typing import Any
 
@@ -11,6 +12,8 @@ from sklearn.ensemble import IsolationForest
 from ..base import AtlasSchema, Metric, MetricResult
 from ..decorators import metric
 from ..utils import calculate_duplicate_rate, detect_numeric_columns, detect_text_columns
+
+logger = logging.getLogger(__name__)
 
 
 @metric(
@@ -25,12 +28,16 @@ class DataQualityNoiseMetric(Metric):
 
     def compute(self, df: pd.DataFrame, **kwargs: Any) -> MetricResult:
         """Compute noise indicators and an aggregate 0.0--1.0 score."""
+        logger.debug("Computing data quality & noise for %d rows, %d columns", len(df), len(df.columns))
         duplicate_rate = calculate_duplicate_rate(df)
         numeric = detect_numeric_columns(df)
         text = detect_text_columns(df)
         outlier_rate = self._statistical_outlier_rate(df[numeric] if numeric else pd.DataFrame())
         text_anomaly_rate = self._statistical_outlier_rate(self._text_features(df, text))
         schema_conformance, schema_details = self._schema_conformance(df, kwargs.get("schema"))
+        logger.debug("Schema validation mode: %s", schema_details["mode"])
+        if schema_details["violations"]:
+            logger.warning("Schema violations in columns: %s", sorted(schema_details["violations"]))
         consistency = self._consistency(df, kwargs.get("consistency_rules", {}))
         error_rate = float(np.mean([duplicate_rate, outlier_rate, text_anomaly_rate,
                                     1 - schema_conformance, 1 - consistency]))
@@ -45,8 +52,9 @@ class DataQualityNoiseMetric(Metric):
             reasons.append(f"{text_anomaly_rate:.1%} of text values have an anomalous length or character mix.")
         recommendations = (["Deduplicate records and review anomalous numeric and text values."]
                            if reasons else [])
-        return MetricResult(self.name, self.category, round(1 - error_rate, 4), details,
-                            reasons, recommendations)
+        score = round(1 - error_rate, 4)
+        logger.debug("Data quality & noise score: %s", score)
+        return MetricResult(self.name, self.category, score, details, reasons, recommendations)
 
     @staticmethod
     def _statistical_outlier_rate(values: pd.DataFrame) -> float:
@@ -158,5 +166,7 @@ class DataQualityNoiseMetric(Metric):
                 result = rule(df) if callable(rule) else df.eval(rule)
                 outcomes.append(float(pd.Series(result).mean()))
             except Exception:
+                logger.warning("Consistency rule %r raised and was scored as a full failure (0.0).",
+                               name, exc_info=True)
                 outcomes.append(0.0)
         return float(np.mean(outcomes)) if outcomes else 1.0

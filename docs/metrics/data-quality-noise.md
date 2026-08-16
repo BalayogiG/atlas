@@ -523,7 +523,12 @@ Source: [atlas/metrics/data_quality_noise.py](../../atlas/metrics/data_quality_n
 
 ### Logging
 
-None. `DataQualityNoiseMetric.compute()` does not use the `logging` module or emit any log output — it is a pure function of `df` and `kwargs`. For visibility into a run, inspect the returned `MetricResult.details` (especially `schema_validation.violations`) directly.
+`DataQualityNoiseMetric.compute()` logs via `logging.getLogger("atlas.metrics.data_quality_noise")`. Silent by default (see `CompletenessMetric`'s logging note for the `NullHandler` pattern); configure `logging.basicConfig(level=...)` in your application to see it.
+
+* `DEBUG` — entry (row/column counts), the resolved schema mode (`"inferred"` vs. `"user_defined"`), and the final score.
+* `WARNING` — emitted when `schema_validation.violations` is non-empty (listing the offending columns), **and** whenever a `consistency_rules` entry raises an exception. The latter closes a real blind spot: `_consistency()` catches `Exception` and silently scores a broken rule as a full failure (`0.0`) with no other signal that anything went wrong — the warning now includes the rule's name and a full traceback (`exc_info=True`) so a typo'd `df.eval(...)` string or a rule that throws isn't mistaken for "the data genuinely failed this check."
+
+For structured, machine-readable visibility into a run, `MetricResult.details` (especially `schema_validation.violations`) remains the primary interface — logging is a debugging aid, not a substitute.
 
 ### Dependencies
 

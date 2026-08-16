@@ -1,6 +1,10 @@
 """Reusable dataset, statistics, and report helpers."""
 
+import logging
+import re
 import json
+import urllib.error
+import urllib.request
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -10,6 +14,8 @@ from rich.console import Console
 from rich.table import Table
 
 from .base import EvaluationReport, MetricResult
+
+logger = logging.getLogger(__name__)
 
 
 def load_dataset(dataset: str | Path | pd.DataFrame) -> pd.DataFrame:
@@ -98,3 +104,209 @@ def print_summary(report: EvaluationReport) -> None:
         reasoning = "\n".join(f"• {reason}" for reason in result.reasons) or "—"
         table.add_row(result.metric, result.category, f"{result.score:.4f}", reasoning)
     Console().print(table)
+
+
+REQUIRED_SECTIONS = [
+    "Dataset Details",
+    "Dataset Description",
+    "Dataset Sources",
+    "Uses",
+    "Dataset Structure",
+    "Dataset Creation",
+    "Annotations",
+    "Bias, Risks, and Limitations",
+    "Citation",
+]
+
+
+HUGGINGFACE_REPO_PATTERN = re.compile(r"^[\w.-]+/[\w.-]+$")
+HUGGINGFACE_README_URL = "https://huggingface.co/datasets/{repo_id}/raw/main/README.md"
+
+
+def _huggingface_repo_id(dataset_path: str) -> str | None:
+    """
+    Return the Hugging Face dataset repo id if dataset_path refers to one.
+
+    Accepts either a bare repo id ("paulopontesm/titanic") or a full
+    dataset URL ("https://huggingface.co/datasets/paulopontesm/titanic").
+    """
+    if dataset_path.startswith(("http://", "https://")):
+        if "huggingface.co/datasets/" not in dataset_path:
+            return None
+        remainder = dataset_path.split("huggingface.co/datasets/", 1)[1]
+        segments = [segment for segment in remainder.split("/") if segment]
+        return "/".join(segments[:2]) if len(segments) >= 2 else None
+
+    if HUGGINGFACE_REPO_PATTERN.match(dataset_path) and not Path(dataset_path).exists():
+        return dataset_path
+
+    return None
+
+
+def _fetch_huggingface_readme(repo_id: str) -> str:
+    """Download a dataset card README.md from the Hugging Face Hub."""
+    request = urllib.request.Request(
+        HUGGINGFACE_README_URL.format(repo_id=repo_id),
+        headers={"User-Agent": "atlas-dq-metrics"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.read().decode("utf-8", errors="ignore")
+    except (urllib.error.URLError, urllib.error.HTTPError) as error:
+        logger.warning("Failed to fetch Hugging Face dataset card for repo_id=%r: %s", repo_id, error)
+        return ""
+
+
+def load_documentation(dataset_path: str) -> str:
+    """
+    Load README/Data Card from a dataset directory or the Hugging Face Hub.
+
+    Accepts:
+        A local directory containing README.md, README.MD, DATASET_CARD.md,
+        or datasheet.md
+        A Hugging Face dataset repo id, e.g. "paulopontesm/titanic"
+        A Hugging Face dataset URL, e.g.
+        "https://huggingface.co/datasets/paulopontesm/titanic"
+    """
+    repo_id = _huggingface_repo_id(dataset_path)
+
+    if repo_id:
+        return _fetch_huggingface_readme(repo_id)
+
+    path = Path(dataset_path)
+
+    candidates = [
+        "README.md",
+        "README.MD",
+        "DATASET_CARD.md",
+        "datasheet.md",
+    ]
+
+    for file in candidates:
+        doc = path / file
+        if doc.exists():
+            return doc.read_text(encoding="utf-8", errors="ignore")
+
+    return ""
+
+
+def extract_sections(documentation: str) -> dict[str, str]:
+    """
+    Extract Markdown headings and their content.
+
+    Returns:
+        {
+            "Dataset Details": "...",
+            "Uses": "...",
+            ...
+        }
+    """
+    sections = {}
+
+    current = "ROOT"
+    buffer = []
+
+    for line in documentation.splitlines():
+
+        match = re.match(r"^#+\s+(.*)", line)
+
+        if match:
+
+            sections[current] = "\n".join(buffer).strip()
+
+            current = match.group(1).strip()
+
+            buffer = []
+
+        else:
+            buffer.append(line)
+
+    sections[current] = "\n".join(buffer).strip()
+
+    return sections
+
+
+def documentation_completeness(
+    sections: dict[str, str],
+    required_sections: list[str] | None = None,
+) -> tuple[float, list[str], list[str]]:
+    """
+    Compute documentation completeness.
+
+    Score = found / required
+    """
+
+    required_sections = required_sections or REQUIRED_SECTIONS
+
+    found = []
+
+    missing = []
+
+    for section in required_sections:
+
+        if section in sections and sections[section].strip():
+            found.append(section)
+        else:
+            missing.append(section)
+
+    score = len(found) / len(required_sections)
+
+    return score, found, missing
+
+
+def field_definition_coverage(
+    df: pd.DataFrame,
+    documentation: str,
+) -> float:
+    """
+    Compute how many dataset columns are mentioned
+    in the documentation.
+    """
+
+    if df.empty:
+        return 1.0
+
+    text = documentation.lower()
+
+    documented = sum(
+        column.lower() in text
+        for column in df.columns
+    )
+
+    return documented / len(df.columns)
+
+
+def keyword_score(
+    text: str,
+    keywords: list[str],
+) -> float:
+    """
+    Simple keyword coverage score.
+    """
+
+    if not text.strip():
+        return 0.0
+
+    text = text.lower()
+
+    matches = sum(
+        keyword.lower() in text
+        for keyword in keywords
+    )
+
+    return matches / len(keywords)
+
+
+def get_section(
+    sections: dict[str, str],
+    *names: str,
+) -> str:
+    """
+    Return the first matching section.
+    """
+
+    for name in names:
+        if name in sections:
+            return sections[name]
+
+    return ""

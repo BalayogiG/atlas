@@ -1,5 +1,6 @@
 """Completeness quality metric."""
 
+import logging
 from typing import Any
 
 import pandas as pd
@@ -7,6 +8,8 @@ import pandas as pd
 from ..base import Metric, MetricResult
 from ..decorators import metric
 from ..utils import calculate_missing_rate
+
+logger = logging.getLogger(__name__)
 
 
 @metric(
@@ -22,6 +25,8 @@ class CompletenessMetric(Metric):
     def compute(self, df: pd.DataFrame, **kwargs: Any) -> MetricResult:
         """Compute completeness indicators and an aggregate 0.0--1.0 score."""
         required = kwargs.get("required_fields", [])
+        logger.debug("Computing completeness for %d rows, %d columns (required_fields=%s)",
+                     len(df), len(df.columns), required)
         missing_rate = calculate_missing_rate(df)
         complete_rate = float(df.notna().all(axis=1).mean()) if len(df) else 1.0
         by_column = df.isna().mean().sort_values(ascending=False)
@@ -31,6 +36,7 @@ class CompletenessMetric(Metric):
         required_coverage = (float(df[available_required].notna().all(axis=1).mean())
                              if available_required else complete_rate)
         if missing_required:
+            logger.warning("Required fields not present in dataset columns: %s", missing_required)
             required_coverage = 0.0
         imputed = sum(col.lower().endswith(("_imputed", "_filled")) for col in df.columns)
         imputation_dependence = imputed / len(df.columns) if len(df.columns) else 0.0
@@ -41,5 +47,6 @@ class CompletenessMetric(Metric):
         reasons = [f"{missing_rate:.1%} of cells are missing."] if missing_rate else []
         recommendations = (["Review columns with high missing-value rates and define a treatment policy."]
                            if missing_rate else [])
-        return MetricResult(self.name, self.category, round(1 - missing_rate, 4), details,
-                            reasons, recommendations)
+        score = round(1 - missing_rate, 4)
+        logger.debug("Completeness score: %s", score)
+        return MetricResult(self.name, self.category, score, details, reasons, recommendations)
