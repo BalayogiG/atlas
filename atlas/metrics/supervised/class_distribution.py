@@ -11,7 +11,7 @@ from ...decorators import metric
 @metric(
     name="Class Distribution",
     category="Supervised",
-    metric_id="SDQ001",
+    metric_id="SDQ01",
     category_id="CAT002",
     description="Evaluates how evenly labels are distributed and whether "
                 "minority or rare classes are sufficiently represented."
@@ -148,7 +148,43 @@ class ClassDistribution(Metric):
             "tail_class_coverage": tail_coverage,
         }
 
+        reasons = []
+        if imbalance_ratio > 1:
+            reasons.append(
+                f"The majority class has {imbalance_ratio:.1f}x more samples than the minority class."
+            )
+        if minority_share < 0.1:
+            reasons.append(
+                f"The smallest class accounts for only {minority_share:.1%} of labeled samples."
+            )
+        if group_skew is not None and group_skew > 0.1:
+            reasons.append(
+                f"Label distribution differs by up to {group_skew:.1%} across '{self.group_column}' groups."
+            )
+        if tail_coverage < 1.0:
+            reasons.append(
+                f"Only {tail_coverage:.1%} of classes meet the minimum target of {self.minimum_target} samples."
+            )
+
+        recommendations = []
+        if imbalance_ratio > 1.5 or minority_share < 0.1:
+            recommendations.append(
+                "Apply class balancing (oversampling, undersampling, or class weighting) before training."
+            )
+        if group_skew is not None and group_skew > 0.1:
+            recommendations.append(
+                f"Investigate label distribution across '{self.group_column}' groups for sampling or annotation bias."
+            )
+        if tail_coverage < 1.0:
+            recommendations.append(
+                "Collect additional samples for under-represented classes to reach the minimum target."
+            )
+
         return MetricResult(
-            score=round(score, 4),
-            details=details,
+            self.name,
+            self.category,
+            round(score, 4),
+            details,
+            reasons,
+            recommendations,
         )

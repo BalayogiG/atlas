@@ -99,7 +99,7 @@ def print_summary(report: EvaluationReport) -> None:
     table.add_column("Metric", style="cyan")
     table.add_column("Category", style="green")
     table.add_column("Score", justify="right")
-    table.add_column("Reasoning", max_width=48)
+    table.add_column("Reason", max_width=48)
     for result in report.metrics.values():
         reasoning = "\n".join(f"• {reason}" for reason in result.reasons) or "—"
         table.add_row(result.metric, result.category, f"{result.score:.4f}", reasoning)
