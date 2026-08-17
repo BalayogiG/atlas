@@ -6,8 +6,8 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from ..base import Metric, MetricResult
-from ..decorators import metric
+from ...base import Metric, MetricResult
+from ...decorators import metric
 
 DEFAULT_SARVAM_URL = "https://api.sarvam.ai/translate"
 

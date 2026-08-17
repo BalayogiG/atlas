@@ -5,9 +5,9 @@ from typing import Any
 
 import pandas as pd
 
-from ..base import Metric, MetricResult
-from ..decorators import metric
-from ..utils import (
+from ...base import Metric, MetricResult
+from ...decorators import metric
+from ...utils import (
     load_documentation,
     extract_sections,
     documentation_completeness,

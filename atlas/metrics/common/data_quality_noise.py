@@ -9,9 +9,9 @@ import pandas as pd
 from scipy.stats import zscore
 from sklearn.ensemble import IsolationForest
 
-from ..base import AtlasSchema, Metric, MetricResult
-from ..decorators import metric
-from ..utils import calculate_duplicate_rate, detect_numeric_columns, detect_text_columns
+from ...base import AtlasSchema, Metric, MetricResult
+from ...decorators import metric
+from ...utils import calculate_duplicate_rate, detect_numeric_columns, detect_text_columns
 
 logger = logging.getLogger(__name__)
 

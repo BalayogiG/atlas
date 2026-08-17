@@ -1,13 +1,15 @@
 """Built-in ATLAS metrics."""
 
-from .completeness import CompletenessMetric
-from .data_quality_noise import DataQualityNoiseMetric
-from .documentation_transparency import DocumentationTransparencyMetric
-from .toxicity import ToxicityMetric
+from .common.completeness import CompletenessMetric
+from .common.data_quality_noise import DataQualityNoiseMetric
+from .common.documentation_transparency import DocumentationTransparencyMetric
+from .common.toxicity import ToxicityMetric
+from .supervised.class_distribution import ClassDistribution
 
 __all__ = [
     "CompletenessMetric",
     "DataQualityNoiseMetric",
     "DocumentationTransparencyMetric",
     "ToxicityMetric",
+    "ClassDistribution",
 ]

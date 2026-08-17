@@ -4,3 +4,4 @@ __pycache__
 atlas.egg-info
 LICENSE
 .env
+docs

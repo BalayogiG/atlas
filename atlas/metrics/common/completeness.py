@@ -5,9 +5,9 @@ from typing import Any
 
 import pandas as pd
 
-from ..base import Metric, MetricResult
-from ..decorators import metric
-from ..utils import calculate_missing_rate
+from ...base import Metric, MetricResult
+from ...decorators import metric
+from ...utils import calculate_missing_rate
 
 logger = logging.getLogger(__name__)
 
