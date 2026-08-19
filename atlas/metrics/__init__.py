@@ -5,6 +5,7 @@ from .common.data_quality_noise import DataQualityNoiseMetric
 from .common.documentation_transparency import DocumentationTransparencyMetric
 from .common.toxicity import ToxicityMetric
 from .supervised.class_distribution import ClassDistribution
+from .supervised.annotator_diversity import AnnotatorDiversityBiasMetric
 
 __all__ = [
     "CompletenessMetric",
@@ -12,4 +13,5 @@ __all__ = [
     "DocumentationTransparencyMetric",
     "ToxicityMetric",
     "ClassDistribution",
+    "AnnotatorDiversityBiasMetric",
 ]
